@@ -1,0 +1,34 @@
+{
+  "name": "oauthifizer",
+  "version": "0.0.1",
+  "description": "Easy-to-integrate OAuth2 implementation based on passport and its strategies.",
+  "main": "index.js",
+  "dependencies": {
+    "q": "1.0.1",
+    "oauth2orize": "0.1.x",
+    "passport": "0.1.x",
+    "passport-http": "0.2.x",
+    "passport-http-bearer": "1.0.x",
+    "passport-oauth2-client-password": "0.1.x"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vedi/oauthifizer.git"
+  },
+  "keywords": [
+    "oauth2",
+    "authentication",
+    "passport",
+    "bearer",
+    "token"
+  ],
+  "author": "Fedor Shubin",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/vedi/oauthifizer/issues"
+  },
+  "homepage": "https://github.com/vedi/oauthifizer"
+}
