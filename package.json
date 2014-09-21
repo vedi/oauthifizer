@@ -1,15 +1,18 @@
 {
   "name": "oauthifizer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Easy-to-integrate OAuth2 implementation based on passport and its strategies.",
   "main": "index.js",
   "dependencies": {
-    "q": "1.0.1",
+    "q": "1.0.x",
+    "lodash": "2.4.x",
     "oauth2orize": "0.1.x",
     "passport": "0.1.x",
+    "passport-local": "1.0.x",
     "passport-http": "0.2.x",
     "passport-http-bearer": "1.0.x",
-    "passport-oauth2-client-password": "0.1.x"
+    "passport-oauth2-client-password": "0.1.x",
+    "connect-ensure-login": "0.1.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -25,10 +28,34 @@
     "bearer",
     "token"
   ],
-  "author": "Fedor Shubin",
+  "author": {
+    "name": "Fedor Shubin"
+  },
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/vedi/oauthifizer/issues"
   },
-  "homepage": "https://github.com/vedi/oauthifizer"
+  "homepage": "https://github.com/vedi/oauthifizer",
+  "gitHead": "9fc434dbe06f896fa6c2871ddf990c3f920a600e",
+  "_id": "oauthifizer@0.1.0",
+  "_shasum": "80c3a11ff37b229bf5295dcb8a732a24c0fc113b",
+  "_from": "oauthifizer@0.1.0",
+  "_npmVersion": "1.4.23",
+  "_npmUser": {
+    "name": "vedi",
+    "email": "shubin.fedor@gmail.com"
+  },
+  "maintainers": [
+    {
+      "name": "vedi",
+      "email": "shubin.fedor@gmail.com"
+    }
+  ],
+  "dist": {
+    "shasum": "80c3a11ff37b229bf5295dcb8a732a24c0fc113b",
+    "tarball": "http://registry.npmjs.org/oauthifizer/-/oauthifizer-0.1.0.tgz"
+  },
+  "directories": {},
+  "_resolved": "https://registry.npmjs.org/oauthifizer/-/oauthifizer-0.1.0.tgz",
+  "readme": "ERROR: No README data found!"
 }

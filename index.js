@@ -1,16 +1,70 @@
-var util = require('util');
-var Q = require('q');
-var oauth2orize = require('oauth2orize');
-var passport = require('passport');
-
-var BasicStrategy = require('passport-http').BasicStrategy;
-var ClientPasswordStrategy = require('passport-oauth2-client-password').Strategy;
-var BearerStrategy = require('passport-http-bearer').Strategy;
+var
+  _ = require('lodash'),
+  util = require('util'),
+  Q = require('q'),
+  oauth2orize = require('oauth2orize'),
+  passport = require('passport'),
+  LocalStrategy = require('passport-local').Strategy,
+  BasicStrategy = require('passport-http').BasicStrategy,
+  ClientPasswordStrategy = require('passport-oauth2-client-password').Strategy,
+  BearerStrategy = require('passport-http-bearer').Strategy;
 
 function OAuth2(authDelegate) {
+  this.authDelegate = authDelegate;
+
+  /**
+   * LocalStrategy
+   *
+   * This strategy is used to authenticate users based on a username and password.
+   * Anytime a request is made to authorize an application, we must ensure that
+   * a user is logged in before asking them to approve the request.
+   */
+  passport.use(new LocalStrategy(
+    function(username, password, done) {
+      Q.denodeify(authDelegate.findUser.bind(authDelegate))(({login: username, password: password}))
+        .then(function(user) {
+          return user ? user : false;
+        })
+        .nodeify(done)
+      ;
+    }
+  ));
+
+  passport.serializeUser(function(user, done) {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(function(id, done) {
+    Q.denodeify(authDelegate.findUser.bind(authDelegate))({
+      id: id
+    })
+      .then(function (user) {
+        return done(null, user);
+      })
+      .catch(function (err) {
+        return done(err);
+      })
+    ;
+  });
+
+  /**
+   * BasicStrategy & ClientPasswordStrategy
+   *
+   * These strategies are used to authenticate registered OAuth clients.  They are
+   * employed to protect the `token` endpoint, which consumers use to obtain
+   * access tokens.  The OAuth 2.0 specification suggests that clients use the
+   * HTTP Basic scheme to authenticate.  Use of the client password strategy
+   * allows clients to send the same credentials in the request body (as opposed
+   * to the `Authorization` header).  While this approach is not recommended by
+   * the specification, in practice it is quite common.
+   */
+
   passport.use(new BasicStrategy(
     function (login, password, done) {
-      Q.denodeify(authDelegate.findUserByLoginAndPassword.bind(authDelegate))(login, password)
+      Q.denodeify(authDelegate.findUser.bind(authDelegate))(({login: login, password: password}))
+        .then(function(user) {
+          return user ? user : false;
+        })
         .nodeify(done)
       ;
     }
@@ -18,15 +72,26 @@ function OAuth2(authDelegate) {
 
   passport.use(new ClientPasswordStrategy(
     function (clientId, clientSecret, done) {
-      Q.denodeify(authDelegate.findClientByIdAndSecret.bind(authDelegate))(clientId, clientSecret)
+      Q.denodeify(authDelegate.findClient.bind(authDelegate))({
+        clientId: clientId,
+        clientSecret: clientSecret
+      })
         .nodeify(done)
       ;
     }
   ));
 
+  /**
+   * BearerStrategy
+   *
+   * This strategy is used to authenticate users based on an access token (aka a
+   * bearer token).  The user must have previously authorized a client
+   * application, which is issued an access token to make requests on behalf of
+   * the authorizing user.
+   */
   passport.use(new BearerStrategy(
     function (accessToken, done) {
-      Q.denodeify(authDelegate.findUserByAccessToken.bind(authDelegate))(accessToken)
+      Q.denodeify(authDelegate.findUserByToken.bind(authDelegate))({accessToken:accessToken})
         .then(function (result) {
           return done(null, result.obj, result.info)
         })
@@ -41,28 +106,115 @@ function OAuth2(authDelegate) {
 // create OAuth 2.0 server
   this.server = oauth2orize.createServer();
 
-// Exchange login & password for access token.
+  this.server.serializeClient(function(client, done) {
+    return done(null, client.clientId);
+  });
 
-  this.server.exchange(oauth2orize.exchange.password(function (client, login, password, scope, done) {
-    var tokenValue;
-    var refreshTokenValue;
-    var user;
+  this.server.deserializeClient(function(id, done) {
+    Q.denodeify(authDelegate.findClient.bind(authDelegate))({
+      clientId: id,
+      clientSecret: false
+    })
+      .then(function (client) {
+        return done(null, client);
+      })
+      .catch(function (err) {
+        return done(err);
+      })
+    ;
+  });
 
-    Q.denodeify(authDelegate.findUserByLoginAndPassword.bind(authDelegate))(login, password)
+  this.server.grant(oauth2orize.grant.code(function(client, redirectUri, user, ares, done) {
+    var codeValue = authDelegate.generateTokenValue();
+
+    Q.denodeify(authDelegate.createAuthorizationCode.bind(authDelegate))({
+        user: user,
+        client: client,
+        scope: ares.scope,
+        redirectUri: redirectUri,
+        codeValue: codeValue
+      })
+      .then(function () {
+        return done(null, codeValue);
+      })
+      .catch(function (err) {
+        return done(err);
+      })
+    ;
+  }));
+
+  this.server.exchange(oauth2orize.exchange.code(function(client, codeValue, redirectUri, done) {
+    var context = {
+      client: client,
+      codeValue: codeValue,
+      redirectUri: redirectUri,
+      scope: undefined,
+      tokenValue: undefined,
+      refreshTokenValue: undefined,
+      authorizationCode: undefined
+    };
+    Q.denodeify(authDelegate.findAuthorizationCode.bind(authDelegate))(context)
       .then(function (result) {
-        if (result === false) {
+        if (!result) {
           throw false;
         }
-        user = result;
-        return Q.denodeify(authDelegate.cleanUpTokensByUserAndClient.bind(authDelegate))(user, client);
+        context.authorizationCode = result;
+        context.scope = result.scope;
       })
       .then(function () {
-        tokenValue = authDelegate.generateTokenValue();
-        refreshTokenValue = authDelegate.generateTokenValue();
-        return Q.denodeify(authDelegate.createTokensByUserAndClient.bind(authDelegate))(user, client, scope, tokenValue, refreshTokenValue)
+        return Q.denodeify(authDelegate.cleanUpTokens.bind(authDelegate))(context);
+        return done(null, codeValue);
       })
       .then(function () {
-        return done(null, tokenValue, refreshTokenValue, authDelegate.getTokenInfo());
+        context.tokenValue = authDelegate.generateTokenValue();
+        context.refreshTokenValue = authDelegate.generateTokenValue();
+        return Q.denodeify(authDelegate.createTokens.bind(authDelegate))(context)
+      })
+      .then(function () {
+        return Q.denodeify(authDelegate.getTokenInfo.bind(authDelegate))(context)
+      })
+      .then(function (tokenInfo) {
+        return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+      })
+      .catch(function (err) {
+        if (err === false) {
+          return done(null, false);
+        } else {
+          return done(err);
+        }
+      })
+    ;
+  }));
+
+  // Exchange login & password for access token.
+
+  this.server.exchange(oauth2orize.exchange.password(function (client, login, password, scope, done) {
+    var context = {
+      client: client,
+      scope: scope,
+      tokenValue: undefined,
+      refreshTokenValue: undefined,
+      user: undefined
+    };
+
+    Q.denodeify(authDelegate.findUser.bind(authDelegate))({login: login, password: password})
+      .then(function (result) {
+        if (!result) {
+          throw false;
+        }
+        context.user = result;
+        return Q.denodeify(authDelegate.cleanUpTokens.bind(authDelegate))(context);
+      })
+      .then(function () {
+        context.tokenValue = authDelegate.generateTokenValue();
+        context.refreshTokenValue = authDelegate.generateTokenValue();
+        return Q.denodeify(authDelegate.createTokens.bind(authDelegate))(context)
+      })
+      .then(function () {
+        return Q.denodeify(authDelegate.getTokenInfo.bind(authDelegate))(context)
+      })
+      .then(function (tokenInfo) {
+        return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
       })
       .catch(function (err) {
         if (err === false) {
@@ -76,25 +228,31 @@ function OAuth2(authDelegate) {
 
 // Exchange refreshToken for access token.
   this.server.exchange(oauth2orize.exchange.refreshToken(function (client, refreshToken, scope, done) {
-    var tokenValue;
-    var refreshTokenValue;
-    var user;
-
-    Q.denodeify(authDelegate.findUserByRefreshToken.bind(authDelegate))(refreshToken)
+    var context = {
+      client: client,
+      scope: scope,
+      tokenValue: undefined,
+      refreshTokenValue: undefined,
+      user: undefined
+    };
+    Q.denodeify(authDelegate.findUserByToken.bind(authDelegate))({refreshToken: refreshToken})
       .then(function (result) {
         if (result.obj === false) {
           throw false;
         }
-        user = result.obj;
-        return Q.denodeify(authDelegate.cleanUpTokensByUserAndClient.bind(authDelegate))(user, client);
+        context.user = result.obj;
+        return Q.denodeify(authDelegate.cleanUpTokens.bind(authDelegate))(context);
       })
       .then(function () {
-        tokenValue = authDelegate.generateTokenValue();
-        refreshTokenValue = authDelegate.generateTokenValue();
-        return Q.denodeify(authDelegate.createTokensByUserAndClient.bind(authDelegate))(user, client, scope, tokenValue, refreshTokenValue)
+        context.tokenValue = authDelegate.generateTokenValue();
+        context.refreshTokenValue = authDelegate.generateTokenValue();
+        return Q.denodeify(authDelegate.createTokens.bind(authDelegate))(context)
       })
       .then(function () {
-        return done(null, tokenValue, refreshTokenValue, authDelegate.getTokenInfo());
+        return Q.denodeify(authDelegate.getTokenInfo.bind(authDelegate))(context)
+      })
+      .then(function (tokenInfo) {
+        return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
       })
       .catch(function (err) {
         if (err === false) {
@@ -110,6 +268,63 @@ function OAuth2(authDelegate) {
 util.inherits(OAuth2, Object);
 
 
+// user authorization endpoint
+//
+// `authorization` middleware accepts a `validate` callback which is
+// responsible for validating the client making the authorization request.  In
+// doing so, is recommended that the `redirectURI` be checked against a
+// registered value, although security requirements may vary accross
+// implementations.  Once validated, the `done` callback must be invoked with
+// a `client` instance, as well as the `redirectURI` to which the user will be
+// redirected after an authorization decision is obtained.
+//
+// This middleware simply initializes a new authorization transaction.  It is
+// the application's responsibility to authenticate the user and render a dialog
+// to obtain their approval (displaying details about the client requesting
+// authorization).  We accomplish that here by routing through `ensureLoggedIn()`
+// first, and rendering the `dialog` view.
+OAuth2.prototype.getAuthorization = function() {
+  var _this = this;
+  return [
+    _.bind(_this.authDelegate.ensureLoggedIn, _this.authDelegate),
+    this.server.authorization(function(clientId, redirectUri, done) {
+      Q.denodeify(_this.authDelegate.findClient.bind(_this.authDelegate))({
+        clientId: clientId,
+        clientSecret: false
+      })
+        .then(function (client){
+          if (client === false) {
+            throw false;
+          }
+          done(null, client, redirectUri);
+        })
+        .catch(function (err) {
+          if (err === false) {
+            return done(null, false);
+          } else {
+            return done(err);
+          }
+        })
+      ;
+    }),
+    _.bind(_this.authDelegate.approveClient, _this.authDelegate)
+  ];
+};
+
+// user decision endpoint
+//
+// `decision` middleware processes a user's decision to allow or deny access
+// requested by a client application.  Based on the grant type requested by the
+// client, the above grant middleware configured above will be invoked to send
+// a response.
+
+OAuth2.prototype.getDecision = function() {
+  return [
+    _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
+    this.server.decision()
+  ];
+};
+
 // token endpoint
 //
 // `token` middleware handles client requests to exchange authorization grants
@@ -124,6 +339,7 @@ OAuth2.prototype.getToken = function() {
     this.server.errorHandler()
   ];
 };
+
 
 OAuth2.passport = passport;
 

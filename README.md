@@ -78,9 +78,10 @@ AuthDelegate.prototype.createTokensByUserAndClient = function (user, client, sco
 
 /**
  * Get additional token info.
+ * @param context object, containing client, scope, tokenValue, refreshTokenValue, user
  * @returns {Object} an arbitrary object
  */
-AuthDelegate.prototype.getTokenInfo = function () {
+AuthDelegate.prototype.getTokenInfo = function (context) {
   return {};
 };
 
