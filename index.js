@@ -10,6 +10,7 @@ var
   BearerStrategy = require('passport-http-bearer').Strategy;
 
 function OAuth2(authDelegate) {
+  this.passport = passport;
   this.authDelegate = authDelegate;
 
   /**
