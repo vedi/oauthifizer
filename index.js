@@ -268,6 +268,50 @@ function OAuth2(authDelegate) {
 util.inherits(OAuth2, Object);
 
 
+OAuth2.prototype._bindAfterAuthorization = function(req, res, next) {
+  if (this.authDelegate.afterAuthorization) {
+    var _this = this;
+    // proxy end()
+    var end = res.end;
+    res.end = function(chunk, encoding) {
+      _this.authDelegate.afterAuthorization.call(_this.authDelegate, res);
+      res.end = end;
+      res.end(chunk, encoding);
+    }
+  }
+  next();
+};
+
+OAuth2.prototype._bindAfterDecision = function(req, res, next) {
+  if (this.authDelegate.afterDecision) {
+    var _this = this;
+    // proxy end()
+    var end = res.end;
+    res.end = function(chunk, encoding) {
+      _this.authDelegate.afterDecision.call(_this.authDelegate, res);
+      res.end = end;
+      res.end(chunk, encoding);
+    }
+  }
+  next();
+};
+
+OAuth2.prototype._bindAfterToken = function(req, res, next) {
+  if (this.authDelegate.afterToken) {
+    var _this = this;
+    // proxy end()
+    var end = res.end;
+    res.end = function(chunk, encoding) {
+      data = JSON.parse(chunk);
+      _this.authDelegate.afterToken.call(_this.authDelegate, data, res);
+      res.end = end;
+      res.end(chunk, encoding);
+    }
+  }
+  next();
+};
+
+
 // user authorization endpoint
 //
 // `authorization` middleware accepts a `validate` callback which is
@@ -287,6 +331,7 @@ OAuth2.prototype.getAuthorization = function() {
   var _this = this;
   return [
     _.bind(_this.authDelegate.ensureLoggedIn, _this.authDelegate),
+    _.bind(_this._bindAfterAuthorization, _this),
     this.server.authorization(function(clientId, redirectUri, done) {
       Q.denodeify(_this.authDelegate.findClient.bind(_this.authDelegate))({
         clientId: clientId,
@@ -307,7 +352,7 @@ OAuth2.prototype.getAuthorization = function() {
         })
       ;
     }),
-    _.bind(_this.authDelegate.approveClient, _this.authDelegate)
+    _.bind(_this.authDelegate.approveClient, _this.authDelegate)()
   ];
 };
 
@@ -321,6 +366,7 @@ OAuth2.prototype.getAuthorization = function() {
 OAuth2.prototype.getDecision = function() {
   return [
     _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
+    _.bind(this._bindAfterDecision, this),
     this.server.decision()
   ];
 };
@@ -335,11 +381,11 @@ OAuth2.prototype.getDecision = function() {
 OAuth2.prototype.getToken = function() {
   return [
     passport.authenticate(['basic', 'oauth2-client-password'], { session: false }),
+    _.bind(this._bindAfterToken, this),
     this.server.token(),
     this.server.errorHandler()
   ];
 };
-
 
 OAuth2.passport = passport;
 
