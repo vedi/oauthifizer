@@ -164,7 +164,6 @@ function OAuth2(authDelegate) {
       })
       .then(function () {
         return Q.denodeify(authDelegate.cleanUpTokens.bind(authDelegate))(context);
-        return done(null, codeValue);
       })
       .then(function () {
         context.tokenValue = authDelegate.generateTokenValue();

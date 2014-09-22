@@ -1,6 +1,6 @@
 {
   "name": "oauthifizer",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Easy-to-integrate OAuth2 implementation based on passport and its strategies.",
   "main": "index.js",
   "dependencies": {
