@@ -1,6 +1,8 @@
 oauthifizer
 ===========
 
+> Simple example project is available at https://github.com/vedi/restifizer-example
+
 In several projects, where I needed to implement user authentication, I used almost the same pease of code. It's completely based on `passport` and its strategies, but it allows us to critically simplify the integration and supporting of the project.
 
 `oauthifizer` by itself it's a glue between `passport`, its strategies, `oauth2orize` on one hand and your application, which should keep be clean and simple, on the other hand. Again `oauthifizer` is not bound to any exact data model or tech of storing data, you should do it by your own, implementing delegate.
