@@ -1,13 +1,13 @@
 {
   "name": "oauthifizer",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Easy-to-integrate OAuth2 implementation based on passport and its strategies.",
   "main": "index.js",
   "dependencies": {
     "q": "1.0.x",
     "lodash": "2.4.x",
     "oauth2orize": "0.1.x",
-    "passport": "0.1.x",
+    "passport": "0.2.x",
     "passport-local": "1.0.x",
     "passport-http": "0.2.x",
     "passport-http-bearer": "1.0.x",
