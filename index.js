@@ -43,6 +43,7 @@ function OAuth2(authDelegate) {
         return done(null, user);
       })
       .catch(function (err) {
+        err.status = err.status || 401;
         return done(err);
       })
     ;
@@ -97,6 +98,7 @@ function OAuth2(authDelegate) {
           return done(null, result.obj, result.info)
         })
         .catch(function (err) {
+          err.status = err.status || 401;
           return done(err);
         })
       ;
@@ -120,6 +122,7 @@ function OAuth2(authDelegate) {
         return done(null, client);
       })
       .catch(function (err) {
+        err.status = err.status || 401;
         return done(err);
       })
     ;
@@ -129,16 +132,17 @@ function OAuth2(authDelegate) {
     var codeValue = authDelegate.generateTokenValue();
 
     Q.denodeify(authDelegate.createAuthorizationCode.bind(authDelegate))({
-        user: user,
-        client: client,
-        scope: ares.scope,
-        redirectUri: redirectUri,
-        codeValue: codeValue
-      })
+      user: user,
+      client: client,
+      scope: ares.scope,
+      redirectUri: redirectUri,
+      codeValue: codeValue
+    })
       .then(function () {
         return done(null, codeValue);
       })
       .catch(function (err) {
+        err.status = err.status || 401;
         return done(err);
       })
     ;
@@ -180,6 +184,7 @@ function OAuth2(authDelegate) {
         if (err === false) {
           return done(null, false);
         } else {
+          err.status = err.status || 401;
           return done(err);
         }
       })
@@ -220,6 +225,7 @@ function OAuth2(authDelegate) {
         if (err === false) {
           return done(null, false);
         } else {
+          err.status = err.status || 401;
           return done(err);
         }
       })
@@ -258,6 +264,7 @@ function OAuth2(authDelegate) {
         if (err === false) {
           return done(null, false);
         } else {
+          err.status = err.status || 401;
           return done(err);
         }
       })
@@ -347,6 +354,7 @@ OAuth2.prototype.getAuthorization = function() {
           if (err === false) {
             return done(null, false);
           } else {
+            err.status = err.status || 401;
             return done(err);
           }
         })
