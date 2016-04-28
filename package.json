@@ -4,15 +4,14 @@
   "description": "Easy-to-integrate OAuth2 implementation based on passport and its strategies.",
   "main": "index.js",
   "dependencies": {
-    "q": "1.0.x",
-    "lodash": "2.4.x",
-    "oauth2orize": "0.1.x",
-    "passport": "0.2.x",
+    "bluebird": "^3.3.5",
+    "lodash": "~4.11.1",
+    "oauth2orize": "1.2.x",
+    "passport": "0.3.x",
     "passport-local": "1.0.x",
-    "passport-http": "0.2.x",
+    "passport-http": "0.3.x",
     "passport-http-bearer": "1.0.x",
-    "passport-oauth2-client-password": "0.1.x",
-    "connect-ensure-login": "0.1.x"
+    "passport-oauth2-client-password": "0.1.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
