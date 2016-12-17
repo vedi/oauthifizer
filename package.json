@@ -6,12 +6,7 @@
   "dependencies": {
     "bluebird": "^3.3.5",
     "lodash": "~4.11.1",
-    "oauth2orize": "1.2.x",
-    "passport": "0.3.x",
-    "passport-local": "1.0.x",
-    "passport-http": "0.3.x",
-    "passport-http-bearer": "1.0.x",
-    "passport-oauth2-client-password": "0.1.x"
+    "oauth2orize": "1.2.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -23,7 +18,6 @@
   "keywords": [
     "oauth2",
     "authentication",
-    "passport",
     "bearer",
     "token"
   ],
