@@ -1,6 +1,7 @@
 /**
  * Created by eugenia on 17.12.16.
  */
+const HTTP_STATUSES = require('http-statuses');
 const Authenticator = require('./authenticator');
 
 class ClientAuthenticator extends Authenticator {
@@ -10,12 +11,12 @@ class ClientAuthenticator extends Authenticator {
       options = {};
     }
 
-    this.passReqToCallback = options.passReqToCallback;
-
     super({
       verify,
       name: Authenticator.AUTH_TYPES.CLIENT
     });
+
+    this.passReqToCallback = options.passReqToCallback;
   }
 
   authenticate(req) {
@@ -32,7 +33,7 @@ class ClientAuthenticator extends Authenticator {
       }
 
       if (!client) {
-        return this.fail();
+        return this.fail(HTTP_STATUSES.UNAUTHORIZED.code, HTTP_STATUSES.UNAUTHORIZED.message);
       }
 
       this.logIn(client, info);

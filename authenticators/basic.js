@@ -10,13 +10,12 @@ class BasicAuthenticator extends Authenticator {
       verify = options;
       options = {};
     }
-
-    this.passReqToCallback = options.passReqToCallback;
-
     super({
       verify,
       name: Authenticator.AUTH_TYPES.BASIC
     });
+
+    this.passReqToCallback = options.passReqToCallback;
   }
 
   authenticate(req) {

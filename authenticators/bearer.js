@@ -1,6 +1,7 @@
 /**
  * Created by eugenia on 17.12.16.
  */
+const HTTP_STATUSES = require('http-statuses');
 const Authenticator = require('./authenticator');
 
 class BearerAuthenticator extends Authenticator {
@@ -10,12 +11,12 @@ class BearerAuthenticator extends Authenticator {
       options = {};
     }
 
-    this.passReqToCallback = options.passReqToCallback;
-
     super({
       verify,
       name: Authenticator.AUTH_TYPES.BEARER
     });
+
+    this.passReqToCallback = options.passReqToCallback;
   }
 
   authenticate(req) {
@@ -31,26 +32,26 @@ class BearerAuthenticator extends Authenticator {
           token = credentials;
         }
       } else {
-        return this.fail(400);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
       }
     }
 
     if (req.body && req.body.access_token) {
       if (token) {
-        return this.fail(400);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
       }
       token = req.body.access_token;
     }
 
     if (req.query && req.query.access_token) {
       if (token) {
-        return this.fail(400);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
       }
       token = req.query.access_token;
     }
 
     if (!token) {
-      return this.fail(this._challenge());
+      return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
     }
 
     function callback(err, user, info) {
@@ -62,10 +63,11 @@ class BearerAuthenticator extends Authenticator {
           info = {message: info}
         }
         info = info || {};
-        return this.fail(this._challenge('invalid_token', info.message));
+        // TODO: set proper errors as specified in oauth2.0 specs
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'invalid_token');
       }
 
-      this.success(user, info);
+      this.logIn(user, info);
     }
 
     if (this.passReqToCallback) {

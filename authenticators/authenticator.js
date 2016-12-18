@@ -16,15 +16,15 @@ class Authenticator {
     this.verify = verify;
   }
 
-  static AUTH_TYPES = {
-    BASIC: 'basic',
-    BEARER: 'bearer',
-    CLIENT: 'oauth-2-client-password'
-  };
-
   authenticate () {
     throw new Error('`authenticate` method must be overridden by subclass!');
   }
 }
+
+Authenticator.AUTH_TYPES = {
+  BASIC: 'basic',
+  BEARER: 'bearer',
+  CLIENT: 'oauth2-client-password'
+};
 
 module.exports = Authenticator;

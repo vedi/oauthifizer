@@ -3,10 +3,11 @@
 const _ = require('lodash');
 const Bb = require('bluebird');
 const oauth2orize = require('oauth2orize');
-const {AUTH_TYPES} = require('./authenticators/authenticator');
+
 const BasicAuthenticator = require('./authenticators/basic');
 const BearerAuthenticator = require('./authenticators/bearer');
-const ClientAuthenticator = require('./authenticators/oauth-2-client-password');
+const ClientAuthenticator = require('./authenticators/oauth2-client-password');
+const {AUTH_TYPES} = require('./authenticators/authenticator');
 
 class OAuth2 {
 
@@ -44,6 +45,7 @@ class OAuth2 {
           .asCallback(done)
       })
     };
+
     // create OAuth 2.0 server
     this.server = oauth2orize.createServer();
 
@@ -361,6 +363,8 @@ class OAuth2 {
         authenticator.logIn = (user) => {
           return req[userProperty] = user;
         };
+
+        return authenticator.authenticate(req);
 
       });
 
