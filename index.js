@@ -1,119 +1,50 @@
 'use strict';
 
-var _ = require('lodash');
-var Bb = require('bluebird');
-var oauth2orize = require('oauth2orize');
-var passport = require('passport');
-var LocalStrategy = require('passport-local').Strategy;
-var BasicStrategy = require('passport-http').BasicStrategy;
-var ClientPasswordStrategy = require('passport-oauth2-client-password').Strategy;
-var BearerStrategy = require('passport-http-bearer').Strategy;
+const _ = require('lodash');
+const Bb = require('bluebird');
+const oauth2orize = require('oauth2orize');
+const {AUTH_TYPES} = require('./authenticators/authenticator');
+const BasicAuthenticator = require('./authenticators/basic');
+const BearerAuthenticator = require('./authenticators/bearer');
+const ClientAuthenticator = require('./authenticators/oauth-2-client-password');
 
 class OAuth2 {
 
   constructor(authDelegate) {
-    this.passport = passport;
     this.authDelegate = authDelegate;
 
-    /**
-     * LocalStrategy
-     *
-     * This strategy is used to authenticate users based on a username and password.
-     * Anytime a request is made to authorize an application, we must ensure that
-     * a user is logged in before asking them to approve the request.
-     */
-    passport.use(new LocalStrategy(
-      (username, password, done) => {
+    this.authenticators = {
+      [AUTH_TYPES.BASIC]: new BasicAuthenticator((login, password, done) => {
         authDelegate
-          .findUser({login: username, password: password})
+          .findUser({login, password})
           .then((user) => {
             return user ? user : false;
           })
           .asCallback(done)
         ;
-      }
-    ));
-
-    passport.serializeUser((user, done) => {
-      done(null, user.id);
-    });
-
-    passport.deserializeUser((id, done) => {
-      authDelegate
-        .findUser({
-          id: id
-        })
-        .then((user) => {
-          return done(null, user);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    });
-
-    /**
-     * BasicStrategy & ClientPasswordStrategy
-     *
-     * These strategies are used to authenticate registered OAuth clients.  They are
-     * employed to protect the `token` endpoint, which consumers use to obtain
-     * access tokens.  The OAuth 2.0 specification suggests that clients use the
-     * HTTP Basic scheme to authenticate.  Use of the client password strategy
-     * allows clients to send the same credentials in the request body (as opposed
-     * to the `Authorization` header).  While this approach is not recommended by
-     * the specification, in practice it is quite common.
-     */
-
-    passport.use(new BasicStrategy(
-      (login, password, done) => {
-        authDelegate
-          .findUser({login: login, password: password})
-          .then((user) => {
-            return user ? user : false;
-          })
-          .asCallback(done)
-        ;
-      }
-    ));
-
-    passport.use(new ClientPasswordStrategy(
-      (clientId, clientSecret, done) => {
+      }),
+      [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
+            return authDelegate
+              .findUserByToken({accessToken})
+              .then((result) => {
+                return done(null, result.obj, result.info)
+              })
+              .catch((err) => {
+                err.status = err.status || 401;
+                return done(err);
+              })
+              ;
+      }),
+      [AUTH_TYPES.CLIENT]: new ClientAuthenticator((clientId, clientSecret, done) => {
         authDelegate
           .findClient({
-            clientId: clientId,
-            clientSecret: clientSecret
+            clientId,
+            clientSecret
           })
           .asCallback(done)
-        ;
-      }
-    ));
-
-    /**
-     * BearerStrategy
-     *
-     * This strategy is used to authenticate users based on an access token (aka a
-     * bearer token).  The user must have previously authorized a client
-     * application, which is issued an access token to make requests on behalf of
-     * the authorizing user.
-     */
-    passport.use(new BearerStrategy(
-      (accessToken, done) => {
-        return authDelegate
-          .findUserByToken({accessToken: accessToken})
-          .then((result) => {
-            return done(null, result.obj, result.info)
-          })
-          .catch((err) => {
-            err.status = err.status || 401;
-            return done(err);
-          })
-          ;
-      }
-    ));
-
-
-  // create OAuth 2.0 server
+      })
+    };
+    // create OAuth 2.0 server
     this.server = oauth2orize.createServer();
 
     this.server.serializeClient((client, done) => {
@@ -137,7 +68,7 @@ class OAuth2 {
     });
 
     this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
-      var codeValue = authDelegate.generateTokenValue();
+      const codeValue = authDelegate.generateTokenValue();
 
       authDelegate
         .createAuthorizationCode({
@@ -158,7 +89,7 @@ class OAuth2 {
     }));
 
     this.server.exchange(oauth2orize.exchange.code((client, codeValue, redirectUri, done) => {
-      var context = {
+      const context = {
         client: client,
         codeValue: codeValue,
         redirectUri: redirectUri,
@@ -204,7 +135,7 @@ class OAuth2 {
     // Exchange login & password for access token.
 
     this.server.exchange(oauth2orize.exchange.password((client, login, password, scope, done) => {
-      var context = {
+      const context = {
         client: client,
         scope: scope,
         tokenValue: undefined,
@@ -245,7 +176,7 @@ class OAuth2 {
 
 // Exchange refreshToken for access token.
     this.server.exchange(oauth2orize.exchange.refreshToken((client, refreshToken, scope, done) => {
-      var context = {
+      const context = {
         client: client,
         scope: scope,
         tokenValue: undefined,
@@ -288,7 +219,7 @@ class OAuth2 {
   _bindAfterAuthorization(req, res, next) {
     if (this.authDelegate.afterAuthorization) {
       // proxy end()
-      var end = res.end;
+      const end = res.end;
       res.end = (chunk, encoding) => {
         this.authDelegate.afterAuthorization.call(this.authDelegate, res);
         res.end = end;
@@ -301,7 +232,7 @@ class OAuth2 {
   _bindAfterDecision(req, res, next) {
     if (this.authDelegate.afterDecision) {
       // proxy end()
-      var end = res.end;
+      const end = res.end;
       res.end = (chunk, encoding) => {
         this.authDelegate.afterDecision.call(this.authDelegate, res);
         res.end = end;
@@ -314,9 +245,9 @@ class OAuth2 {
   _bindAfterToken(req, res, next) {
     if (this.authDelegate.afterToken) {
       // proxy end()
-      var end = res.end;
+      const end = res.end;
       res.end = (chunk, encoding) => {
-        var data = JSON.parse(chunk);
+        const data = JSON.parse(chunk);
         this.authDelegate.afterToken.call(this.authDelegate, data, res);
         res.end = end;
         res.end(chunk, encoding);
@@ -325,13 +256,16 @@ class OAuth2 {
     next();
   }
 
+  _getAuthenticator(name) {
+    return this.authenticators[name];
+  }
 
   // user authorization endpoint
   //
   // `authorization` middleware accepts a `validate` callback which is
   // responsible for validating the client making the authorization request.  In
   // doing so, is recommended that the `redirectURI` be checked against a
-  // registered value, although security requirements may vary accross
+  // registered value, although security requirements may consty accross
   // implementations.  Once validated, the `done` callback must be invoked with
   // a `client` instance, as well as the `redirectURI` to which the user will be
   // redirected after an authorization decision is obtained.
@@ -393,14 +327,56 @@ class OAuth2 {
   // authenticate when making requests to this endpoint.
   getToken() {
     return [
-      passport.authenticate(['basic', 'oauth2-client-password'], {session: false}),
+      this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
       _.bind(this._bindAfterToken, this),
       this.server.token(),
       this.server.errorHandler()
     ];
   }
-}
 
-OAuth2.passport = passport;
+  authenticate(authTypes, options = {}) {
+    const failures = [];
+    const {userProperty = 'user'} = options;
+
+    if (!Array.isArray(authTypes)) {
+      authTypes = [authTypes];
+    }
+
+    return (req, res, next) => {
+      authTypes.map((name) => {
+        const authenticator = this._getAuthenticator(name);
+
+        if (!authenticator) {
+          throw new Error(`Invalid authentication type ${name}!`);
+        }
+
+        authenticator.fail = (code, message) => {
+          return failures.push({code, message});
+        };
+
+        authenticator.error = (err) => {
+          return next(err || {message: `Failed to establish ${name} authentication`});
+        };
+
+        authenticator.logIn = (user) => {
+          return req[userProperty] = user;
+        };
+
+      });
+
+      if (failures.length === authTypes.length) {
+        // all the auth types failed
+        res.statusCode = failures[0].code;
+        return next(failures[0].message);
+      }
+
+      req.isAuthenticated = () => {
+        return !!req[userProperty];
+      };
+
+      next();
+    };
+  }
+}
 
 module.exports = OAuth2;
