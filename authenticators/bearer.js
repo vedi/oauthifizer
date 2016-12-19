@@ -32,26 +32,26 @@ class BearerAuthenticator extends Authenticator {
           token = credentials;
         }
       } else {
-        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'Invalid bearer token provided');
       }
     }
 
     if (req.body && req.body.access_token) {
       if (token) {
-        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'Multiple tokens provided');
       }
       token = req.body.access_token;
     }
 
     if (req.query && req.query.access_token) {
       if (token) {
-        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
+        return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'Multiple tokens provided');
       }
       token = req.query.access_token;
     }
 
     if (!token) {
-      return this.fail(HTTP_STATUSES.BAD_REQUEST.code, HTTP_STATUSES.BAD_REQUEST.message);
+      return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'No token provided');
     }
 
     function callback(err, user, info) {

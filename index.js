@@ -2,7 +2,6 @@
 
 const _ = require('lodash');
 const Bb = require('bluebird');
-const HTTP_STATUSES = require('http-statuses');
 const oauth2orize = require('oauth2orize');
 
 const BasicAuthenticator = require('./authenticators/basic');
@@ -337,9 +336,10 @@ class OAuth2 {
     ];
   }
 
+
   authenticate(authTypes, options = {}) {
-    const failures = [];
     const {userProperty = 'user'} = options;
+    const _this = this;
 
     if (!Array.isArray(authTypes)) {
       authTypes = [authTypes];
@@ -352,19 +352,7 @@ class OAuth2 {
           return res.redirect(options.failureRedirectUrl);
         }
 
-        if (options.failWithMessage) {
-          let status = HTTP_STATUSES.UNAUTHORIZED.code;
-
-          _.forEach(HTTP_STATUSES, (item) => {
-            if (item.code === failures[0].code) {
-              status = item;
-            }
-          });
-
-          return next(status.createError(failures[0].message));
-        }
-
-        return res.end(failures[0].code, failures[0].message);
+        return next();
       }
 
 
@@ -379,14 +367,13 @@ class OAuth2 {
         }
 
         const name = authTypes[index];
-        const authenticator = this._getAuthenticator(name);
+        const authenticator = _this._getAuthenticator(name);
 
         if (!authenticator) {
           throw new Error(`Invalid authentication type ${name}!`);
         }
 
         authenticator.fail = (code, message) => {
-          failures.push({code, message});
           return establishAuth(index + 1);
         };
 
@@ -407,9 +394,6 @@ class OAuth2 {
         return authenticator.authenticate(req);
 
       })(0);
-
-
-      next();
     };
   }
 }

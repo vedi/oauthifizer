@@ -21,7 +21,7 @@ class ClientAuthenticator extends Authenticator {
 
   authenticate(req) {
     if (!req.body || (!req.body['client_id'] || !req.body['client_secret'])) {
-      return this.fail();
+      return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'No client credentials provided');
     }
 
     const clientId = req.body['client_id'];
