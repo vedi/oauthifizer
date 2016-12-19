@@ -268,7 +268,7 @@ class OAuth2 {
   // `authorization` middleware accepts a `validate` callback which is
   // responsible for validating the client making the authorization request.  In
   // doing so, is recommended that the `redirectURI` be checked against a
-  // registered value, although security requirements may consty accross
+  // registered value, although security requirements may vary across
   // implementations.  Once validated, the `done` callback must be invoked with
   // a `client` instance, as well as the `redirectURI` to which the user will be
   // redirected after an authorization decision is obtained.
