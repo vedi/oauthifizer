@@ -2,6 +2,7 @@
 
 const _ = require('lodash');
 const Bb = require('bluebird');
+const HTTP_STATUSES = require('http-statuses');
 const oauth2orize = require('oauth2orize');
 
 const BasicAuthenticator = require('./authenticators/basic');
@@ -15,26 +16,26 @@ class OAuth2 {
     this.authDelegate = authDelegate;
 
     this.authenticators = {
-      [AUTH_TYPES.BASIC]: new BasicAuthenticator((login, password, done) => {
+      [AUTH_TYPES.BASIC]: new BasicAuthenticator((clientId, clientSecret, done) => {
         authDelegate
-          .findUser({login, password})
-          .then((user) => {
-            return user ? user : false;
+          .findClient({
+            clientId,
+            clientSecret
           })
           .asCallback(done)
         ;
       }),
       [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
-            return authDelegate
-              .findUserByToken({accessToken})
-              .then((result) => {
-                return done(null, result.obj, result.info)
-              })
-              .catch((err) => {
-                err.status = err.status || 401;
-                return done(err);
-              })
-              ;
+        return authDelegate
+          .findUserByToken({accessToken})
+          .then((result) => {
+            return done(null, result.obj, result.info)
+          })
+          .catch((err) => {
+            err.status = err.status || 401;
+            return done(err);
+          })
+          ;
       }),
       [AUTH_TYPES.CLIENT]: new ClientAuthenticator((clientId, clientSecret, done) => {
         authDelegate
@@ -345,7 +346,39 @@ class OAuth2 {
     }
 
     return (req, res, next) => {
-      authTypes.map((name) => {
+
+      function endWithFailure() {
+        if (options.failureRedirectUrl) {
+          return res.redirect(options.failureRedirectUrl);
+        }
+
+        if (options.failWithMessage) {
+          let status = HTTP_STATUSES.UNAUTHORIZED.code;
+
+          _.forEach(HTTP_STATUSES, (item) => {
+            if (item.code === failures[0].code) {
+              status = item;
+            }
+          });
+
+          return next(status.createError(failures[0].message));
+        }
+
+        return res.end(failures[0].code, failures[0].message);
+      }
+
+
+      req.isAuthenticated = () => {
+        return !!req[userProperty];
+      };
+
+      (function establishAuth(index) {
+        if (!authTypes[index]) {
+          // all auths have failed
+          return endWithFailure();
+        }
+
+        const name = authTypes[index];
         const authenticator = this._getAuthenticator(name);
 
         if (!authenticator) {
@@ -353,7 +386,8 @@ class OAuth2 {
         }
 
         authenticator.fail = (code, message) => {
-          return failures.push({code, message});
+          failures.push({code, message});
+          return establishAuth(index + 1);
         };
 
         authenticator.error = (err) => {
@@ -361,22 +395,19 @@ class OAuth2 {
         };
 
         authenticator.logIn = (user) => {
-          return req[userProperty] = user;
+          req[userProperty] = user;
+
+          if (options.successRedirectUrl) {
+            return res.redirect(options.successRedirectUrl);
+          }
+
+          return next();
         };
 
         return authenticator.authenticate(req);
 
-      });
+      })(0);
 
-      if (failures.length === authTypes.length) {
-        // all the auth types failed
-        res.statusCode = failures[0].code;
-        return next(failures[0].message);
-      }
-
-      req.isAuthenticated = () => {
-        return !!req[userProperty];
-      };
 
       next();
     };
