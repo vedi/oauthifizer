@@ -53,7 +53,7 @@
   "_resolved": "https://registry.npmjs.org/oauthifizer/-/oauthifizer-0.1.0.tgz",
   "readme": "ERROR: No README data found!",
   "engines": {
-    "node": ">=6.9.1",
-    "npm": ">=3.10.8"
+    "node": "^6.9.x",
+    "npm": "^3.10.x"
   }
 }
