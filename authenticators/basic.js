@@ -4,6 +4,14 @@
 const HTTP_STATUSES = require('http-statuses');
 const Authenticator = require('./authenticator');
 
+/**
+ * Basic Authenticator.
+ * @constructor
+ * @param {object} options - Options. Optional
+ * @param {boolean} options.passReqToCallback
+ * @param {function} verify - Function for client credentials verification
+ */
+
 class BasicAuthenticator extends Authenticator {
   constructor(options, verify) {
     if (typeof options === 'function') {
@@ -17,6 +25,13 @@ class BasicAuthenticator extends Authenticator {
 
     this.passReqToCallback = options.passReqToCallback;
   }
+
+  /**
+   * Authenticate
+   * Extracts client credentials from Authorization header. Writes client model to req[options.userProperty]
+   * @function
+   * @param {object} req - incoming message
+   * */
 
   authenticate(req) {
     req = req.req || req;

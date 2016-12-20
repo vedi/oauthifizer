@@ -8,6 +8,14 @@ const BearerAuthenticator = require('./authenticators/bearer');
 const ClientAuthenticator = require('./authenticators/oauth2-client-password');
 const {AUTH_TYPES} = require('./authenticators/authenticator');
 
+/**
+ * OAuth2.
+ * @constructor
+ * @param {object} authDelegate - authDelegate
+ * @param {boolean} options.passReqToCallback
+ * @param {function} verify - Function for token verification
+ */
+
 class OAuth2 {
 
   constructor(authDelegate) {
@@ -45,7 +53,7 @@ class OAuth2 {
       })
     };
 
-    this.grantTypes = {
+    this.GRANT_TYPES = {
       PASSWORD: 'password',
       IMPLICIT: 'implicit',
       AUTHORIZATION_CODE: 'authorization_code',
@@ -53,7 +61,7 @@ class OAuth2 {
     };
 
     this.exchangeHandlers = {
-      [this.grantTypes.AUTHORIZATION_CODE] (req, res, done) {
+      [this.GRANT_TYPES.AUTHORIZATION_CODE] (req, res, done) {
         const {user: client} = req;
         const {codeValue, redirectUri} = req.body;
         const context = {
@@ -98,7 +106,7 @@ class OAuth2 {
           })
         ;
       },
-      [this.grantTypes.PASSWORD] (req, res, done) {
+      [this.GRANT_TYPES.PASSWORD] (req, res, done) {
         const {user: client} = req;
         const {username, password, scope} = req.body;
         const context = {
@@ -138,7 +146,7 @@ class OAuth2 {
             }
           });
       },
-      [this.grantTypes.REFRESH_TOKEN] (req, res, done) {
+      [this.GRANT_TYPES.REFRESH_TOKEN] (req, res, done) {
         const {user: client} = req;
         const {refreshToken, scope} = req.body;
         const context = {
@@ -178,7 +186,7 @@ class OAuth2 {
             }
           });
       },
-      [this.grantTypes.IMPLICIT] (req, res, done) {
+      [this.GRANT_TYPES.IMPLICIT] (req, res, done) {
         const {user: client} = req;
         const {
           state,
@@ -212,7 +220,7 @@ class OAuth2 {
             client,
             tokenValue: token,
             // doesn't need refresh token, userId
-            grantType: this.grantTypes.IMPLICIT
+            grantType: this.GRANT_TYPES.IMPLICIT
           })
           .then(() => {
             let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
@@ -255,14 +263,34 @@ class OAuth2 {
     next();
   }
 
+  /**
+   * @function
+   * @param {string} name - authenticator name. One of AUTH_TYPES
+   * @returns authenticator
+   * */
   _getAuthenticator(name) {
     return this.authenticators[name];
   }
 
+  /**
+   * Exchanges request data to access token depending on grant_type
+   * @function
+   * */
   exchange() {
+    /**
+     * @function
+     * @param {string} grant_type - Grant, one of this.GRANT_TYPES
+     * @param {string} username - For password grant_type only
+     * @param {string} password - For password grant_type only
+     * @param {string} client_id
+     * @param {string} client_secret
+     * @param {string} scope - Optional. scope of resources to get access to
+     * @param {string} state - For implicit and authorization_code grant types only
+     * @param {string} redirect_uri - For implicit and authorization_code grant types only
+     * */
     return (req, res, next) => {
       const type = req.body['grant_type'];
-      const allowedTypes = _.values(this.grantTypes);
+      const allowedTypes = _.values(this.GRANT_TYPES);
 
       if (!type) {
         return next({error: 'invalid_request', 'error_description': 'Grant type must be specified'});
@@ -276,8 +304,22 @@ class OAuth2 {
     }
   }
 
+
+  /** Sends auth result
+   * @function
+   * @param {object} res - Incoming message
+   * @param {function} next
+   * */
   respond(res, next) {
 
+    /**
+     * @function
+     * @param {object} err
+     * @param {string} accessToken
+     * @param {string} refreshToken - Optional if grant_type is implicit
+     * @param {object} params
+     * @returns ends server response
+     * */
     return (err, accessToken, refreshToken, params = {}) => {
       if (err) {
         return next(err);
@@ -309,12 +351,13 @@ class OAuth2 {
 
   }
 
-  // token endpoint
-  //
-  // `token` middleware handles client requests to exchange authorization grants
-  // for access tokens.  Based on the grant type being exchanged, the above
-  // exchange middleware will be invoked to handle the request.  Clients must
-  // authenticate when making requests to this endpoint.
+  /**
+   * token endpoint
+   * `token` middleware handles client requests to exchange authorization grants
+   * for access tokens.  Based on the grant type being exchanged, the above
+   * exchange middleware will be invoked to handle the request.  Clients must
+   * authenticate when making requests to this endpoint.
+   * */
   getToken() {
     return [
       this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
@@ -323,27 +366,46 @@ class OAuth2 {
     ];
   }
 
-  getAuthorizationCode (req, res, done) {
-    const {client, redirectUri, user, ares} = req.body;
-    const codeValue = this.authDelegate.generateTokenValue();
+  /**
+   * @function
+   * Authorization code middleware
+   * generates authorization code
+   * @returns authorization code
+   * */
+  getAuthorizationCode() {
 
-    this.authDelegate
-      .createAuthorizationCode({
-        user: user,
-        client: client,
-        scope: ares.scope,
-        redirectUri: redirectUri,
-        codeValue: codeValue
-      })
-      .then(() => {
-        return done(null, codeValue);
-      })
-      .catch((err) => {
-        err.status = err.status || 401;
-        return done(err);
-      })
-    ;
+    return [
+      this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
+      (req, res, done) => {
+        const {client, redirectUri, user, ares} = req.body;
+        const codeValue = this.authDelegate.generateTokenValue();
+
+        this.authDelegate
+          .createAuthorizationCode({
+            user: user,
+            client: client,
+            scope: ares.scope,
+            redirectUri: redirectUri,
+            codeValue: codeValue
+          })
+          .then(() => {
+            return done(null, codeValue);
+          })
+          .catch((err) => {
+            err.status = err.status || 401;
+            return done(err);
+          });
+      }
+    ];
+
   }
+
+  /**
+   * @function
+   * authenticates request
+   * @param {array} authTypes - authentication types. Should be in AUTH_TYPES
+   * @param {object} options
+   * */
 
   authenticate(authTypes, options = {}) {
     const {userProperty = 'user'} = options;

@@ -4,6 +4,14 @@
 const HTTP_STATUSES = require('http-statuses');
 const Authenticator = require('./authenticator');
 
+/**
+ * Bearer Authenticator.
+ * @constructor
+ * @param {object} options - Options. Optional
+ * @param {boolean} options.passReqToCallback
+ * @param {function} verify - Function for token verification
+ */
+
 class BearerAuthenticator extends Authenticator {
   constructor(options, verify) {
     if (typeof options === 'function') {
@@ -18,6 +26,13 @@ class BearerAuthenticator extends Authenticator {
 
     this.passReqToCallback = options.passReqToCallback;
   }
+
+  /**
+   * Authenticate
+   * Extracts access token from Authorization header. Writes user model to req[options.userProperty]
+   * @function
+   * @param {object} req - incoming message
+   * */
 
   authenticate(req) {
     let token;
