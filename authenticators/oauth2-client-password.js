@@ -25,7 +25,7 @@ class ClientAuthenticator extends Authenticator {
     }
 
     const clientId = req.body['client_id'];
-    const clientSecret = req.body['client_secret'];
+    const clientSecret = req.body['client_secret'] || false;
 
     function callback(err, client, info) {
       if (err) {

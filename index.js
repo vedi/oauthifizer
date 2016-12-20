@@ -1,8 +1,7 @@
 'use strict';
-
+const url = require('url');
 const _ = require('lodash');
 const Bb = require('bluebird');
-const oauth2orize = require('oauth2orize');
 
 const BasicAuthenticator = require('./authenticators/basic');
 const BearerAuthenticator = require('./authenticators/bearer');
@@ -46,30 +45,16 @@ class OAuth2 {
       })
     };
 
-    // create OAuth 2.0 server
-    this.server = oauth2orize.createServer();
+    this.grantTypes = {
+      PASSWORD: 'password',
+      IMPLICIT: 'implicit',
+      AUTHORIZATION_CODE: 'authorization_code',
+      REFRESH_TOKEN: 'refresh_token'
+    };
 
-    this.server.serializeClient((client, done) => {
-      return done(null, client.clientId);
-    });
+    /*this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
 
-    this.server.deserializeClient((id, done) => {
-      authDelegate
-        .findClient({
-          clientId: id,
-          clientSecret: false
-        })
-        .then((client) => {
-          return done(null, client);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    });
-
-    this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
+      TODO: where to put this?
       const codeValue = authDelegate.generateTokenValue();
 
       authDelegate
@@ -88,134 +73,195 @@ class OAuth2 {
           return done(err);
         })
       ;
-    }));
+    }));*/
 
-    this.server.exchange(oauth2orize.exchange.code((client, codeValue, redirectUri, done) => {
-      const context = {
-        client: client,
-        codeValue: codeValue,
-        redirectUri: redirectUri,
-        scope: undefined,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        authorizationCode: undefined
-      };
-      authDelegate
-        .findAuthorizationCode(context)
-        .then((result) => {
-          if (!result) {
-            return Bb.reject(false);
-          }
-          context.authorizationCode = result;
-          context.scope = result.scope;
-        })
-        .then(() => {
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
-      ;
-    }));
-
-    // Exchange login & password for access token.
-
-    this.server.exchange(oauth2orize.exchange.password((client, login, password, scope, done) => {
-      const context = {
-        client: client,
-        scope: scope,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        user: undefined
-      };
-
-      authDelegate
-        .findUser({login: login, password: password})
-        .then((result) => {
-          if (!result) {
-            throw false;
-          }
-          context.user = result;
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
-      ;
-    }));
-
-// Exchange refreshToken for access token.
-    this.server.exchange(oauth2orize.exchange.refreshToken((client, refreshToken, scope, done) => {
-      const context = {
-        client: client,
-        scope: scope,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        user: undefined
-      };
-
-      return authDelegate
-        .findUserByToken({refreshToken: refreshToken})
-        .then((result) => {
-          if (result.obj === false) {
-            throw false;
-          }
-          context.user = result.obj;
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
+    this.exchangeHandlers = {
+      [this.grantTypes.AUTHORIZATION_CODE] (req, res, done) {
+        const {user: client} = req;
+        const {codeValue, redirectUri} = req.body;
+        const context = {
+          client,
+          codeValue,
+          redirectUri,
+          scope: undefined,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          authorizationCode: undefined
+        };
+        authDelegate
+          .findAuthorizationCode(context)
+          .then((result) => {
+            if (!result) {
+              return Bb.reject(false);
+            }
+            context.authorizationCode = result;
+            context.scope = result.scope;
+          })
+          .then(() => {
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          })
         ;
-    }));
+      },
+      [this.grantTypes.PASSWORD] (req, res, done) {
+        const {user: client} = req;
+        const {username, password, scope} = req.body;
+        const context = {
+          client,
+          scope,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          user: undefined
+        };
+
+        authDelegate
+          .findUser({login: username, password: password})
+          .then((result) => {
+            if (!result) {
+              throw false;
+            }
+            context.user = result;
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+      },
+      [this.grantTypes.REFRESH_TOKEN] (req, res, done) {
+        const {user: client} = req;
+        const {refreshToken, scope} = req.body;
+        const context = {
+          client,
+          scope,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          user: undefined
+        };
+
+        return authDelegate
+          .findUserByToken({refreshToken})
+          .then((result) => {
+            if (result.obj === false) {
+              throw false;
+            }
+            context.user = result.obj;
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+      },
+      [this.grantTypes.IMPLICIT] (req, res, done) {
+        const {user: client} = req;
+        const {
+          state,
+          scope,
+          response_type: responseType,
+          redirect_uri: redirectUri
+        } = req.body;
+
+        const redirectEndpoint = url.parse(redirectUri);
+        const redirectHost = redirectEndpoint.hostname;
+        const clientRedirectEndpoint = url.parse(client.redirectUri);
+        const clientRedirectHost = clientRedirectEndpoint.hostname;
+
+
+        if (!responseType) {
+          return done({error: 'invalid_request', 'error_description': 'response_type must be specified'});
+        }
+
+        if (clientRedirectHost !== redirectHost) {
+          return ({error: 'invalid_request', 'error_description': 'Redirect URI mismatch'});
+        }
+
+        if (responseType !== 'token') {
+          return done({error: 'invalid_request', 'error_description': `Invalid response type "${responseType}"`});
+        }
+
+        const token = this.authDelegate.generateTokenValue();
+
+        return this.authDelegate
+          .createTokens({
+            client,
+            tokenValue: token,
+            // doesn't need refresh token, userId
+            grantType: this.grantTypes.IMPLICIT
+          })
+          .then(() => {
+            let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
+              `expires_in=${this.authDelegate.tokenLife}`;
+
+            if (state) {
+              responseRedirectUri += `&state=${state}`;
+            }
+
+            if (scope) {
+              responseRedirectUri += `&scope=${scope}`;
+            }
+
+            return res.redirect(responseRedirectUri);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+
+      }
+    };
   }
 
   _bindAfterAuthorization(req, res, next) {
@@ -281,6 +327,8 @@ class OAuth2 {
     return [
       _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
       _.bind(this._bindAfterAuthorization, this),
+
+      /* TODO: implement */
       this.server.authorization((clientId, redirectUri, done) => {
         this.authDelegate
           .findClient({
@@ -317,8 +365,25 @@ class OAuth2 {
     return [
       _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
       _.bind(this._bindAfterDecision, this),
-      this.server.decision()
+      /* TODO: implement yourself: this.server.decision()*/
     ];
+  }
+
+  exchange() {
+    return (req, res, next) => {
+      const type = req.body['grant_type'];
+      const allowedTypes = _.values(this.grantTypes);
+
+      if (!type) {
+        return next({error: 'invalid_request', 'error_description': 'Grant type must be specified'});
+      }
+
+      if (!allowedTypes.includes(type)) {
+        return next({error: 'invalid_grant', 'error_description': `Invalid grant type "${type}"`});
+      }
+
+      return this.exchangeHandlers[type](req, res, next);
+    }
   }
 
   // token endpoint
@@ -331,8 +396,7 @@ class OAuth2 {
     return [
       this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
       _.bind(this._bindAfterToken, this),
-      this.server.token(),
-      this.server.errorHandler()
+      this.exchange()
     ];
   }
 
@@ -362,7 +426,7 @@ class OAuth2 {
 
       (function establishAuth(index) {
         if (!authTypes[index]) {
-          // all auths have failed
+          // all the auths have failed
           return endWithFailure();
         }
 
@@ -373,7 +437,7 @@ class OAuth2 {
           throw new Error(`Invalid authentication type ${name}!`);
         }
 
-        authenticator.fail = (code, message) => {
+        authenticator.fail = () => {
           return establishAuth(index + 1);
         };
 

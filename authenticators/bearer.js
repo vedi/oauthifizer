@@ -54,7 +54,7 @@ class BearerAuthenticator extends Authenticator {
       return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'No token provided');
     }
 
-    function callback(err, user, info) {
+    function callback(err, user, info = {}) {
       if (err) {
         return this.error(err);
       }
@@ -62,8 +62,7 @@ class BearerAuthenticator extends Authenticator {
         if (typeof info == 'string') {
           info = {message: info}
         }
-        info = info || {};
-        // TODO: set proper errors as specified in oauth2.0 specs
+
         return this.fail(HTTP_STATUSES.BAD_REQUEST.code, 'invalid_token');
       }
 
