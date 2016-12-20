@@ -52,29 +52,6 @@ class OAuth2 {
       REFRESH_TOKEN: 'refresh_token'
     };
 
-    /*this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
-
-     TODO: where to put this?
-     const codeValue = authDelegate.generateTokenValue();
-
-     authDelegate
-     .createAuthorizationCode({
-     user: user,
-     client: client,
-     scope: ares.scope,
-     redirectUri: redirectUri,
-     codeValue: codeValue
-     })
-     .then(() => {
-     return done(null, codeValue);
-     })
-     .catch((err) => {
-     err.status = err.status || 401;
-     return done(err);
-     })
-     ;
-     }));*/
-
     this.exchangeHandlers = {
       [this.grantTypes.AUTHORIZATION_CODE] (req, res, done) {
         const {user: client} = req;
