@@ -54,26 +54,26 @@ class OAuth2 {
 
     /*this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
 
-      TODO: where to put this?
-      const codeValue = authDelegate.generateTokenValue();
+     TODO: where to put this?
+     const codeValue = authDelegate.generateTokenValue();
 
-      authDelegate
-        .createAuthorizationCode({
-          user: user,
-          client: client,
-          scope: ares.scope,
-          redirectUri: redirectUri,
-          codeValue: codeValue
-        })
-        .then(() => {
-          return done(null, codeValue);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    }));*/
+     authDelegate
+     .createAuthorizationCode({
+     user: user,
+     client: client,
+     scope: ares.scope,
+     redirectUri: redirectUri,
+     codeValue: codeValue
+     })
+     .then(() => {
+     return done(null, codeValue);
+     })
+     .catch((err) => {
+     err.status = err.status || 401;
+     return done(err);
+     })
+     ;
+     }));*/
 
     this.exchangeHandlers = {
       [this.grantTypes.AUTHORIZATION_CODE] (req, res, done) {
@@ -190,7 +190,7 @@ class OAuth2 {
             return authDelegate.getTokenInfo(context);
           })
           .then((tokenInfo) => {
-            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo)();
           })
           .catch((err) => {
             if (err === false) {
@@ -295,8 +295,41 @@ class OAuth2 {
         return next({error: 'invalid_grant', 'error_description': `Invalid grant type "${type}"`});
       }
 
-      return this.exchangeHandlers[type](req, res, next);
+      return this.exchangeHandlers[type](req, res, this.respond(res, next));
     }
+  }
+
+  respond(res, next) {
+
+    return (err, accessToken, refreshToken, params = {}) => {
+      if (err) {
+        return next(err);
+      }
+      if (!accessToken) {
+        return next({error: 'invalid_grant', 'error_description': 'Invalid resource owner credentials'});
+      }
+      if (refreshToken && typeof refreshToken == 'object') {
+        params = refreshToken;
+        refreshToken = null;
+      }
+
+      const response = {'expires_in': this.authDelegate.tokenLife};
+      response.access_token = accessToken;
+      if (refreshToken) {
+        response.refresh_token = refreshToken;
+      }
+      if (params) {
+        Object.assign(response, params);
+      }
+      response.token_type = response.token_type || 'bearer';
+
+      const json = JSON.stringify(response);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Pragma', 'no-cache');
+      res.end(json);
+    }
+
   }
 
   // token endpoint
