@@ -346,6 +346,27 @@ class OAuth2 {
     ];
   }
 
+  getAuthorizationCode (req, res, done) {
+    const {client, redirectUri, user, ares} = req.body;
+    const codeValue = this.authDelegate.generateTokenValue();
+
+    this.authDelegate
+      .createAuthorizationCode({
+        user: user,
+        client: client,
+        scope: ares.scope,
+        redirectUri: redirectUri,
+        codeValue: codeValue
+      })
+      .then(() => {
+        return done(null, codeValue);
+      })
+      .catch((err) => {
+        err.status = err.status || 401;
+        return done(err);
+      })
+    ;
+  }
 
   authenticate(authTypes, options = {}) {
     const {userProperty = 'user'} = options;
