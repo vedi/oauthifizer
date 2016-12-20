@@ -6,8 +6,7 @@
   "dependencies": {
     "bluebird": "^3.3.5",
     "http-statuses": "^0.1.1",
-    "lodash": "~4.11.1",
-    "oauth2orize": "1.2.x"
+    "lodash": "~4.11.1"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

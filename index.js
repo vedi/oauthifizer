@@ -264,32 +264,6 @@ class OAuth2 {
     };
   }
 
-  _bindAfterAuthorization(req, res, next) {
-    if (this.authDelegate.afterAuthorization) {
-      // proxy end()
-      const end = res.end;
-      res.end = (chunk, encoding) => {
-        this.authDelegate.afterAuthorization.call(this.authDelegate, res);
-        res.end = end;
-        res.end(chunk, encoding);
-      }
-    }
-    next();
-  }
-
-  _bindAfterDecision(req, res, next) {
-    if (this.authDelegate.afterDecision) {
-      // proxy end()
-      const end = res.end;
-      res.end = (chunk, encoding) => {
-        this.authDelegate.afterDecision.call(this.authDelegate, res);
-        res.end = end;
-        res.end(chunk, encoding);
-      }
-    }
-    next();
-  }
-
   _bindAfterToken(req, res, next) {
     if (this.authDelegate.afterToken) {
       // proxy end()
@@ -306,67 +280,6 @@ class OAuth2 {
 
   _getAuthenticator(name) {
     return this.authenticators[name];
-  }
-
-  // user authorization endpoint
-  //
-  // `authorization` middleware accepts a `validate` callback which is
-  // responsible for validating the client making the authorization request.  In
-  // doing so, is recommended that the `redirectURI` be checked against a
-  // registered value, although security requirements may vary across
-  // implementations.  Once validated, the `done` callback must be invoked with
-  // a `client` instance, as well as the `redirectURI` to which the user will be
-  // redirected after an authorization decision is obtained.
-  //
-  // This middleware simply initializes a new authorization transaction.  It is
-  // the application's responsibility to authenticate the user and render a dialog
-  // to obtain their approval (displaying details about the client requesting
-  // authorization).  We accomplish that here by routing through `ensureLoggedIn()`
-  // first, and rendering the `dialog` view.
-  getAuthorization() {
-    return [
-      _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
-      _.bind(this._bindAfterAuthorization, this),
-
-      /* TODO: implement */
-      this.server.authorization((clientId, redirectUri, done) => {
-        this.authDelegate
-          .findClient({
-            clientId: clientId,
-            clientSecret: false
-          })
-          .then((client) => {
-            if (client === false) {
-              throw false;
-            }
-            done(null, client, redirectUri);
-          })
-          .catch((err) => {
-            if (err === false) {
-              return done(null, false);
-            } else {
-              err.status = err.status || 401;
-              return done(err);
-            }
-          })
-        ;
-      }),
-      _.bind(this.authDelegate.approveClient, this.authDelegate)()
-    ];
-  }
-
-  // user decision endpoint
-  //
-  // `decision` middleware processes a user's decision to allow or deny access
-  // requested by a client application.  Based on the grant type requested by the
-  // client, the above grant middleware configured above will be invoked to send
-  // a response.
-  getDecision() {
-    return [
-      _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
-      _.bind(this._bindAfterDecision, this),
-      /* TODO: implement yourself: this.server.decision()*/
-    ];
   }
 
   exchange() {
