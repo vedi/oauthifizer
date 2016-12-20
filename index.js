@@ -1,106 +1,39 @@
 'use strict';
+const url = require('url');
+const _ = require('lodash');
+const Bb = require('bluebird');
 
-var _ = require('lodash');
-var Bb = require('bluebird');
-var oauth2orize = require('oauth2orize');
-var passport = require('passport');
-var LocalStrategy = require('passport-local').Strategy;
-var BasicStrategy = require('passport-http').BasicStrategy;
-var ClientPasswordStrategy = require('passport-oauth2-client-password').Strategy;
-var BearerStrategy = require('passport-http-bearer').Strategy;
+const BasicAuthenticator = require('./authenticators/basic');
+const BearerAuthenticator = require('./authenticators/bearer');
+const ClientAuthenticator = require('./authenticators/oauth2-client-password');
+const {AUTH_TYPES} = require('./authenticators/authenticator');
+
+/**
+ * OAuth2.
+ * @constructor
+ * @param {object} authDelegate - authDelegate
+ * @param {boolean} options.passReqToCallback
+ * @param {function} verify - Function for token verification
+ */
 
 class OAuth2 {
 
   constructor(authDelegate) {
-    this.passport = passport;
     this.authDelegate = authDelegate;
 
-    /**
-     * LocalStrategy
-     *
-     * This strategy is used to authenticate users based on a username and password.
-     * Anytime a request is made to authorize an application, we must ensure that
-     * a user is logged in before asking them to approve the request.
-     */
-    passport.use(new LocalStrategy(
-      (username, password, done) => {
-        authDelegate
-          .findUser({login: username, password: password})
-          .then((user) => {
-            return user ? user : false;
-          })
-          .asCallback(done)
-        ;
-      }
-    ));
-
-    passport.serializeUser((user, done) => {
-      done(null, user.id);
-    });
-
-    passport.deserializeUser((id, done) => {
-      authDelegate
-        .findUser({
-          id: id
-        })
-        .then((user) => {
-          return done(null, user);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    });
-
-    /**
-     * BasicStrategy & ClientPasswordStrategy
-     *
-     * These strategies are used to authenticate registered OAuth clients.  They are
-     * employed to protect the `token` endpoint, which consumers use to obtain
-     * access tokens.  The OAuth 2.0 specification suggests that clients use the
-     * HTTP Basic scheme to authenticate.  Use of the client password strategy
-     * allows clients to send the same credentials in the request body (as opposed
-     * to the `Authorization` header).  While this approach is not recommended by
-     * the specification, in practice it is quite common.
-     */
-
-    passport.use(new BasicStrategy(
-      (login, password, done) => {
-        authDelegate
-          .findUser({login: login, password: password})
-          .then((user) => {
-            return user ? user : false;
-          })
-          .asCallback(done)
-        ;
-      }
-    ));
-
-    passport.use(new ClientPasswordStrategy(
-      (clientId, clientSecret, done) => {
+    this.authenticators = {
+      [AUTH_TYPES.BASIC]: new BasicAuthenticator((clientId, clientSecret, done) => {
         authDelegate
           .findClient({
-            clientId: clientId,
-            clientSecret: clientSecret
+            clientId,
+            clientSecret
           })
           .asCallback(done)
         ;
-      }
-    ));
-
-    /**
-     * BearerStrategy
-     *
-     * This strategy is used to authenticate users based on an access token (aka a
-     * bearer token).  The user must have previously authorized a client
-     * application, which is issued an access token to make requests on behalf of
-     * the authorizing user.
-     */
-    passport.use(new BearerStrategy(
-      (accessToken, done) => {
+      }),
+      [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
         return authDelegate
-          .findUserByToken({accessToken: accessToken})
+          .findUserByToken({accessToken})
           .then((result) => {
             return done(null, result.obj, result.info)
           })
@@ -109,253 +42,59 @@ class OAuth2 {
             return done(err);
           })
           ;
-      }
-    ));
-
-
-  // create OAuth 2.0 server
-    this.server = oauth2orize.createServer();
-
-    this.server.serializeClient((client, done) => {
-      return done(null, client.clientId);
-    });
-
-    this.server.deserializeClient((id, done) => {
-      authDelegate
-        .findClient({
-          clientId: id,
-          clientSecret: false
-        })
-        .then((client) => {
-          return done(null, client);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    });
-
-    this.server.grant(oauth2orize.grant.code((client, redirectUri, user, ares, done) => {
-      var codeValue = authDelegate.generateTokenValue();
-
-      authDelegate
-        .createAuthorizationCode({
-          user: user,
-          client: client,
-          scope: ares.scope,
-          redirectUri: redirectUri,
-          codeValue: codeValue
-        })
-        .then(() => {
-          return done(null, codeValue);
-        })
-        .catch((err) => {
-          err.status = err.status || 401;
-          return done(err);
-        })
-      ;
-    }));
-
-    this.server.exchange(oauth2orize.exchange.code((client, codeValue, redirectUri, done) => {
-      var context = {
-        client: client,
-        codeValue: codeValue,
-        redirectUri: redirectUri,
-        scope: undefined,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        authorizationCode: undefined
-      };
-      authDelegate
-        .findAuthorizationCode(context)
-        .then((result) => {
-          if (!result) {
-            return Bb.reject(false);
-          }
-          context.authorizationCode = result;
-          context.scope = result.scope;
-        })
-        .then(() => {
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
-      ;
-    }));
-
-    // Exchange login & password for access token.
-
-    this.server.exchange(oauth2orize.exchange.password((client, login, password, scope, done) => {
-      var context = {
-        client: client,
-        scope: scope,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        user: undefined
-      };
-
-      authDelegate
-        .findUser({login: login, password: password})
-        .then((result) => {
-          if (!result) {
-            throw false;
-          }
-          context.user = result;
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
-      ;
-    }));
-
-// Exchange refreshToken for access token.
-    this.server.exchange(oauth2orize.exchange.refreshToken((client, refreshToken, scope, done) => {
-      var context = {
-        client: client,
-        scope: scope,
-        tokenValue: undefined,
-        refreshTokenValue: undefined,
-        user: undefined
-      };
-
-      return authDelegate
-        .findUserByToken({refreshToken: refreshToken})
-        .then((result) => {
-          if (result.obj === false) {
-            throw false;
-          }
-          context.user = result.obj;
-          return authDelegate.cleanUpTokens(context);
-        })
-        .then(() => {
-          context.tokenValue = authDelegate.generateTokenValue();
-          context.refreshTokenValue = authDelegate.generateTokenValue();
-          return authDelegate.createTokens(context);
-        })
-        .then(() => {
-          return authDelegate.getTokenInfo(context);
-        })
-        .then((tokenInfo) => {
-          return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
-        })
-        .catch((err) => {
-          if (err === false) {
-            return done(null, false);
-          } else {
-            err.status = err.status || 401;
-            return done(err);
-          }
-        })
-        ;
-    }));
-  }
-
-  _bindAfterAuthorization(req, res, next) {
-    if (this.authDelegate.afterAuthorization) {
-      // proxy end()
-      var end = res.end;
-      res.end = (chunk, encoding) => {
-        this.authDelegate.afterAuthorization.call(this.authDelegate, res);
-        res.end = end;
-        res.end(chunk, encoding);
-      }
-    }
-    next();
-  }
-
-  _bindAfterDecision(req, res, next) {
-    if (this.authDelegate.afterDecision) {
-      // proxy end()
-      var end = res.end;
-      res.end = (chunk, encoding) => {
-        this.authDelegate.afterDecision.call(this.authDelegate, res);
-        res.end = end;
-        res.end(chunk, encoding);
-      }
-    }
-    next();
-  }
-
-  _bindAfterToken(req, res, next) {
-    if (this.authDelegate.afterToken) {
-      // proxy end()
-      var end = res.end;
-      res.end = (chunk, encoding) => {
-        var data = JSON.parse(chunk);
-        this.authDelegate.afterToken.call(this.authDelegate, data, res);
-        res.end = end;
-        res.end(chunk, encoding);
-      }
-    }
-    next();
-  }
-
-
-  // user authorization endpoint
-  //
-  // `authorization` middleware accepts a `validate` callback which is
-  // responsible for validating the client making the authorization request.  In
-  // doing so, is recommended that the `redirectURI` be checked against a
-  // registered value, although security requirements may vary accross
-  // implementations.  Once validated, the `done` callback must be invoked with
-  // a `client` instance, as well as the `redirectURI` to which the user will be
-  // redirected after an authorization decision is obtained.
-  //
-  // This middleware simply initializes a new authorization transaction.  It is
-  // the application's responsibility to authenticate the user and render a dialog
-  // to obtain their approval (displaying details about the client requesting
-  // authorization).  We accomplish that here by routing through `ensureLoggedIn()`
-  // first, and rendering the `dialog` view.
-  getAuthorization() {
-    return [
-      _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
-      _.bind(this._bindAfterAuthorization, this),
-      this.server.authorization((clientId, redirectUri, done) => {
-        this.authDelegate
+      }),
+      [AUTH_TYPES.CLIENT]: new ClientAuthenticator((clientId, clientSecret, done) => {
+        authDelegate
           .findClient({
-            clientId: clientId,
-            clientSecret: false
+            clientId,
+            clientSecret
           })
-          .then((client) => {
-            if (client === false) {
-              throw false;
+          .asCallback(done)
+      })
+    };
+
+    this.GRANT_TYPES = {
+      PASSWORD: 'password',
+      IMPLICIT: 'implicit',
+      AUTHORIZATION_CODE: 'authorization_code',
+      REFRESH_TOKEN: 'refresh_token'
+    };
+
+    this.exchangeHandlers = {
+      [this.GRANT_TYPES.AUTHORIZATION_CODE] (req, res, done) {
+        const {user: client} = req;
+        const {codeValue, redirectUri} = req.body;
+        const context = {
+          client,
+          codeValue,
+          redirectUri,
+          scope: undefined,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          authorizationCode: undefined
+        };
+        authDelegate
+          .findAuthorizationCode(context)
+          .then((result) => {
+            if (!result) {
+              return Bb.reject(false);
             }
-            done(null, client, redirectUri);
+            context.authorizationCode = result;
+            context.scope = result.scope;
+          })
+          .then(() => {
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
           })
           .catch((err) => {
             if (err === false) {
@@ -366,41 +105,367 @@ class OAuth2 {
             }
           })
         ;
-      }),
-      _.bind(this.authDelegate.approveClient, this.authDelegate)()
-    ];
+      },
+      [this.GRANT_TYPES.PASSWORD] (req, res, done) {
+        const {user: client} = req;
+        const {username, password, scope} = req.body;
+        const context = {
+          client,
+          scope,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          user: undefined
+        };
+
+        authDelegate
+          .findUser({login: username, password: password})
+          .then((result) => {
+            if (!result) {
+              throw false;
+            }
+            context.user = result;
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+      },
+      [this.GRANT_TYPES.REFRESH_TOKEN] (req, res, done) {
+        const {user: client} = req;
+        const {refreshToken, scope} = req.body;
+        const context = {
+          client,
+          scope,
+          tokenValue: undefined,
+          refreshTokenValue: undefined,
+          user: undefined
+        };
+
+        return authDelegate
+          .findUserByToken({refreshToken})
+          .then((result) => {
+            if (result.obj === false) {
+              throw false;
+            }
+            context.user = result.obj;
+            return authDelegate.cleanUpTokens(context);
+          })
+          .then(() => {
+            context.tokenValue = authDelegate.generateTokenValue();
+            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return authDelegate.createTokens(context);
+          })
+          .then(() => {
+            return authDelegate.getTokenInfo(context);
+          })
+          .then((tokenInfo) => {
+            return done(null, context.tokenValue, context.refreshTokenValue, tokenInfo)();
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+      },
+      [this.GRANT_TYPES.IMPLICIT] (req, res, done) {
+        const {user: client} = req;
+        const {
+          state,
+          scope,
+          response_type: responseType,
+          redirect_uri: redirectUri
+        } = req.body;
+
+        const redirectEndpoint = url.parse(redirectUri);
+        const redirectHost = redirectEndpoint.hostname;
+        const clientRedirectEndpoint = url.parse(client.redirectUri);
+        const clientRedirectHost = clientRedirectEndpoint.hostname;
+
+
+        if (!responseType) {
+          return done({error: 'invalid_request', 'error_description': 'response_type must be specified'});
+        }
+
+        if (clientRedirectHost !== redirectHost) {
+          return ({error: 'invalid_request', 'error_description': 'Redirect URI mismatch'});
+        }
+
+        if (responseType !== 'token') {
+          return done({error: 'invalid_request', 'error_description': `Invalid response type "${responseType}"`});
+        }
+
+        const token = this.authDelegate.generateTokenValue();
+
+        return this.authDelegate
+          .createTokens({
+            client,
+            tokenValue: token,
+            // doesn't need refresh token, userId
+            grantType: this.GRANT_TYPES.IMPLICIT
+          })
+          .then(() => {
+            let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
+              `expires_in=${this.authDelegate.tokenLife}`;
+
+            if (state) {
+              responseRedirectUri += `&state=${state}`;
+            }
+
+            if (scope) {
+              responseRedirectUri += `&scope=${scope}`;
+            }
+
+            return res.redirect(responseRedirectUri);
+          })
+          .catch((err) => {
+            if (err === false) {
+              return done(null, false);
+            } else {
+              err.status = err.status || 401;
+              return done(err);
+            }
+          });
+
+      }
+    };
   }
 
-  // user decision endpoint
-  //
-  // `decision` middleware processes a user's decision to allow or deny access
-  // requested by a client application.  Based on the grant type requested by the
-  // client, the above grant middleware configured above will be invoked to send
-  // a response.
-  getDecision() {
-    return [
-      _.bind(this.authDelegate.ensureLoggedIn, this.authDelegate),
-      _.bind(this._bindAfterDecision, this),
-      this.server.decision()
-    ];
+  _bindAfterToken(req, res, next) {
+    if (this.authDelegate.afterToken) {
+      // proxy end()
+      const end = res.end;
+      res.end = (chunk, encoding) => {
+        const data = JSON.parse(chunk);
+        this.authDelegate.afterToken.call(this.authDelegate, data, res);
+        res.end = end;
+        res.end(chunk, encoding);
+      }
+    }
+    next();
   }
 
-  // token endpoint
-  //
-  // `token` middleware handles client requests to exchange authorization grants
-  // for access tokens.  Based on the grant type being exchanged, the above
-  // exchange middleware will be invoked to handle the request.  Clients must
-  // authenticate when making requests to this endpoint.
+  /**
+   * @function
+   * @param {string} name - authenticator name. One of AUTH_TYPES
+   * @returns authenticator
+   * */
+  _getAuthenticator(name) {
+    return this.authenticators[name];
+  }
+
+  /**
+   * Exchanges request data to access token depending on grant_type
+   * @function
+   * */
+  exchange() {
+    /**
+     * @function
+     * @param {string} grant_type - Grant, one of this.GRANT_TYPES
+     * @param {string} username - For password grant_type only
+     * @param {string} password - For password grant_type only
+     * @param {string} client_id
+     * @param {string} client_secret
+     * @param {string} scope - Optional. scope of resources to get access to
+     * @param {string} state - For implicit and authorization_code grant types only
+     * @param {string} redirect_uri - For implicit and authorization_code grant types only
+     * */
+    return (req, res, next) => {
+      const type = req.body['grant_type'];
+      const allowedTypes = _.values(this.GRANT_TYPES);
+
+      if (!type) {
+        return next({error: 'invalid_request', 'error_description': 'Grant type must be specified'});
+      }
+
+      if (!allowedTypes.includes(type)) {
+        return next({error: 'invalid_grant', 'error_description': `Invalid grant type "${type}"`});
+      }
+
+      return this.exchangeHandlers[type](req, res, this.respond(res, next));
+    }
+  }
+
+
+  /** Sends auth result
+   * @function
+   * @param {object} res - Incoming message
+   * @param {function} next
+   * */
+  respond(res, next) {
+
+    /**
+     * @function
+     * @param {object} err
+     * @param {string} accessToken
+     * @param {string} refreshToken - Optional if grant_type is implicit
+     * @param {object} params
+     * @returns ends server response
+     * */
+    return (err, accessToken, refreshToken, params = {}) => {
+      if (err) {
+        return next(err);
+      }
+      if (!accessToken) {
+        return next({error: 'invalid_grant', 'error_description': 'Invalid resource owner credentials'});
+      }
+      if (refreshToken && typeof refreshToken == 'object') {
+        params = refreshToken;
+        refreshToken = null;
+      }
+
+      const response = {'expires_in': this.authDelegate.tokenLife};
+      response.access_token = accessToken;
+      if (refreshToken) {
+        response.refresh_token = refreshToken;
+      }
+      if (params) {
+        Object.assign(response, params);
+      }
+      response.token_type = response.token_type || 'bearer';
+
+      const json = JSON.stringify(response);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Pragma', 'no-cache');
+      res.end(json);
+    }
+
+  }
+
+  /**
+   * token endpoint
+   * `token` middleware handles client requests to exchange authorization grants
+   * for access tokens.  Based on the grant type being exchanged, the above
+   * exchange middleware will be invoked to handle the request.  Clients must
+   * authenticate when making requests to this endpoint.
+   * */
   getToken() {
     return [
-      passport.authenticate(['basic', 'oauth2-client-password'], {session: false}),
+      this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
       _.bind(this._bindAfterToken, this),
-      this.server.token(),
-      this.server.errorHandler()
+      this.exchange()
     ];
   }
-}
 
-OAuth2.passport = passport;
+  /**
+   * @function
+   * Authorization code middleware
+   * generates authorization code
+   * @returns authorization code
+   * */
+  getAuthorizationCode() {
+
+    return [
+      this.authenticate([AUTH_TYPES.BASIC, AUTH_TYPES.CLIENT]),
+      (req, res, done) => {
+        const {client, redirectUri, user, ares} = req.body;
+        const codeValue = this.authDelegate.generateTokenValue();
+
+        this.authDelegate
+          .createAuthorizationCode({
+            user: user,
+            client: client,
+            scope: ares.scope,
+            redirectUri: redirectUri,
+            codeValue: codeValue
+          })
+          .then(() => {
+            return done(null, codeValue);
+          })
+          .catch((err) => {
+            err.status = err.status || 401;
+            return done(err);
+          });
+      }
+    ];
+
+  }
+
+  /**
+   * @function
+   * authenticates request
+   * @param {array} authTypes - authentication types. Should be in AUTH_TYPES
+   * @param {object} options
+   * */
+
+  authenticate(authTypes, options = {}) {
+    const {userProperty = 'user'} = options;
+    const _this = this;
+
+    if (!Array.isArray(authTypes)) {
+      authTypes = [authTypes];
+    }
+
+    return (req, res, next) => {
+
+      function endWithFailure() {
+        if (options.failureRedirectUrl) {
+          return res.redirect(options.failureRedirectUrl);
+        }
+
+        return next();
+      }
+
+
+      req.isAuthenticated = () => {
+        return !!req[userProperty];
+      };
+
+      (function establishAuth(index) {
+        if (!authTypes[index]) {
+          // all the auths have failed
+          return endWithFailure();
+        }
+
+        const name = authTypes[index];
+        const authenticator = _this._getAuthenticator(name);
+
+        if (!authenticator) {
+          throw new Error(`Invalid authentication type ${name}!`);
+        }
+
+        authenticator.fail = () => {
+          return establishAuth(index + 1);
+        };
+
+        authenticator.error = (err) => {
+          return next(err || {message: `Failed to establish ${name} authentication`});
+        };
+
+        authenticator.logIn = (user) => {
+          req[userProperty] = user;
+
+          if (options.successRedirectUrl) {
+            return res.redirect(options.successRedirectUrl);
+          }
+
+          return next();
+        };
+
+        return authenticator.authenticate(req);
+
+      })(0);
+    };
+  }
+}
 
 module.exports = OAuth2;
