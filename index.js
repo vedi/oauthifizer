@@ -33,7 +33,7 @@ class OAuth2 {
       }),
       [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
         return authDelegate
-          .findUserByToken({accessToken})
+          .decodeJwt({accessToken})
           .then((result) => {
             return done(null, result.obj, result.info)
           })
@@ -86,8 +86,14 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
+            return Bb.join(
+              authDelegate.generateTokenValue(context.user),
+              authDelegate.generateTokenValue(context.user)
+            );
+          })
+          .spread((accessToken, refreshToken) => {
+            context.tokenValue = accessToken;
+            context.refreshTokenValue = refreshToken;
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -127,8 +133,14 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue(context.user);
-            context.refreshTokenValue = authDelegate.generateTokenValue(context.user);
+            return Bb.join(
+              authDelegate.generateTokenValue(context.user),
+              authDelegate.generateTokenValue(context.user)
+            );
+          })
+          .spread((accessToken, refreshToken) => {
+            context.tokenValue = accessToken;
+            context.refreshTokenValue = refreshToken;
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -158,7 +170,7 @@ class OAuth2 {
         };
 
         return authDelegate
-          .findUserByToken({refreshToken})
+          .decodeJwt({refreshToken})
           .then((result) => {
             if (result.obj === false) {
               throw false;
@@ -167,8 +179,14 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue(context.user);
-            context.refreshTokenValue = authDelegate.generateTokenValue(context.user);
+            return Bb.join(
+              authDelegate.generateTokenValue(context.user), 
+              authDelegate.generateTokenValue(context.user)
+            );
+          })
+          .spread((accessToken, refreshToken) => {
+            context.tokenValue = accessToken;
+            context.refreshTokenValue = refreshToken;
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -213,14 +231,15 @@ class OAuth2 {
           return done({error: 'invalid_request', 'error_description': `Invalid response type "${responseType}"`});
         }
 
-        const token = this.authDelegate.generateTokenValue(client);
-
         return this.authDelegate
-          .createTokens({
-            client,
-            tokenValue: token,
-            // doesn't need refresh token, userId
-            grantType: this.GRANT_TYPES.IMPLICIT
+          .generateTokenValue(client)
+          .then((token) => {
+            return this.authDelegate
+              .createTokens({
+                tokenValue: token,
+                // doesn't need refresh token, userId
+                grantType: this.GRANT_TYPES.IMPLICIT
+              })
           })
           .then(() => {
             let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
