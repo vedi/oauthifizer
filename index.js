@@ -127,8 +127,8 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
+            context.tokenValue = authDelegate.generateTokenValue(context.user);
+            context.refreshTokenValue = authDelegate.generateTokenValue(context.user);
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -167,8 +167,8 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
+            context.tokenValue = authDelegate.generateTokenValue(context.user);
+            context.refreshTokenValue = authDelegate.generateTokenValue(context.user);
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -213,7 +213,7 @@ class OAuth2 {
           return done({error: 'invalid_request', 'error_description': `Invalid response type "${responseType}"`});
         }
 
-        const token = this.authDelegate.generateTokenValue();
+        const token = this.authDelegate.generateTokenValue(client);
 
         return this.authDelegate
           .createTokens({
