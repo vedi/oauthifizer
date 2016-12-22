@@ -31,17 +31,19 @@ class OAuth2 {
           .asCallback(done)
         ;
       }),
-      [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
+      [AUTH_TYPES.BEARER]: new BearerAuthenticator({passReqToCallback: true}, (req, accessToken, done) => {
         return authDelegate
-          .decodeJwt({accessToken})
+          .decodeJwt({
+            accessToken,
+            params: req.params
+          })
           .then((result) => {
             return done(null, result.obj, result.info)
           })
           .catch((err) => {
             err.status = err.status || 401;
             return done(err);
-          })
-          ;
+          });
       }),
       [AUTH_TYPES.CLIENT]: new ClientAuthenticator((clientId, clientSecret, done) => {
         authDelegate
@@ -91,7 +93,7 @@ class OAuth2 {
           .then((accessToken) => {
             context.tokenValue = accessToken;
             context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createTokens(context);
+            return authDelegate.createToken(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -134,7 +136,7 @@ class OAuth2 {
           .then((accessToken) => {
             context.tokenValue = accessToken;
             context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createTokens(context);
+            return authDelegate.createToken(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -177,7 +179,7 @@ class OAuth2 {
           .then((accessToken) => {
             context.tokenValue = accessToken;
             context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createTokens(context);
+            return authDelegate.createToken(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -224,15 +226,7 @@ class OAuth2 {
         return this.authDelegate
           .generateJwt(client)
           .then((token) => {
-            return this.authDelegate
-              .createTokens({
-                tokenValue: token,
-                // doesn't need refresh token, userId
-                grantType: this.GRANT_TYPES.IMPLICIT
-              })
-          })
-          .then(() => {
-            let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
+            let responseRedirectUri = `${redirectUri}?access_token=${token}&token_type=bearer&` +
               `expires_in=${this.authDelegate.tokenLife}`;
 
             if (state) {
