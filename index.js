@@ -86,14 +86,11 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return Bb.join(
-              authDelegate.generateTokenValue(context.user),
-              authDelegate.generateTokenValue(context.user)
-            );
+            return authDelegate.generateJwt(context.user);
           })
-          .spread((accessToken, refreshToken) => {
+          .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = refreshToken;
+            context.refreshTokenValue = authDelegate.generateRefreshToken();
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -109,8 +106,7 @@ class OAuth2 {
               err.status = err.status || 401;
               return done(err);
             }
-          })
-        ;
+          });
       },
       [this.GRANT_TYPES.PASSWORD] (req, res, done) {
         const {user: client} = req;
@@ -133,14 +129,11 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return Bb.join(
-              authDelegate.generateTokenValue(context.user),
-              authDelegate.generateTokenValue(context.user)
-            );
+            return authDelegate.generateJwt(context.user);
           })
-          .spread((accessToken, refreshToken) => {
+          .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = refreshToken;
+            context.refreshTokenValue = authDelegate.generateRefreshToken();
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -170,7 +163,7 @@ class OAuth2 {
         };
 
         return authDelegate
-          .decodeJwt({refreshToken})
+          .findUserByToken({refreshToken})
           .then((result) => {
             if (result.obj === false) {
               throw false;
@@ -179,14 +172,11 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return Bb.join(
-              authDelegate.generateTokenValue(context.user), 
-              authDelegate.generateTokenValue(context.user)
-            );
+            return authDelegate.generateJwt(context.user);
           })
-          .spread((accessToken, refreshToken) => {
+          .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = refreshToken;
+            context.refreshTokenValue = authDelegate.generateRefreshToken();
             return authDelegate.createTokens(context);
           })
           .then(() => {
@@ -232,7 +222,7 @@ class OAuth2 {
         }
 
         return this.authDelegate
-          .generateTokenValue(client)
+          .generateJwt(client)
           .then((token) => {
             return this.authDelegate
               .createTokens({
