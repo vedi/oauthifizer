@@ -28,17 +28,16 @@ class OAuth2 {
             clientId,
             clientSecret
           })
-          .asCallback(done)
-        ;
+          .asCallback(done);
       }),
       [AUTH_TYPES.BEARER]: new BearerAuthenticator({passReqToCallback: true}, (req, accessToken, done) => {
         return authDelegate
-          .decodeJwt({
+          .findUserByToken({
             accessToken,
             params: req.params
           })
           .then((result) => {
-            return done(null, result.obj, result.info)
+            return done(null, result.obj, result.info);
           })
           .catch((err) => {
             err.status = err.status || 401;
@@ -88,12 +87,15 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return authDelegate.generateJwt(context.user);
+            return authDelegate.createAccessToken(context);
           })
           .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createToken(context);
+            return authDelegate.createRefreshToken(context);
+          })
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
+            return authDelegate.getTokenInfo(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -131,14 +133,14 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return authDelegate.generateJwt(context.user);
+            return authDelegate.createAccessToken(context);
           })
           .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createToken(context);
+            return authDelegate.createRefreshToken(context);
           })
-          .then(() => {
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
             return authDelegate.getTokenInfo(context);
           })
           .then((tokenInfo) => {
@@ -174,12 +176,15 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            return authDelegate.generateJwt(context.user);
+            return authDelegate.createAccessToken(context);
           })
           .then((accessToken) => {
             context.tokenValue = accessToken;
-            context.refreshTokenValue = authDelegate.generateRefreshToken();
-            return authDelegate.createToken(context);
+            return authDelegate.createRefreshToken(context);
+          })
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
+            return authDelegate.getTokenInfo(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -210,7 +215,6 @@ class OAuth2 {
         const clientRedirectEndpoint = url.parse(client.redirectUri);
         const clientRedirectHost = clientRedirectEndpoint.hostname;
 
-
         if (!responseType) {
           return done({error: 'invalid_request', 'error_description': 'response_type must be specified'});
         }
@@ -224,7 +228,7 @@ class OAuth2 {
         }
 
         return this.authDelegate
-          .generateJwt(client)
+          .createAccessToken({client})
           .then((token) => {
             let responseRedirectUri = `${redirectUri}?access_token=${token}&token_type=bearer&` +
               `expires_in=${this.authDelegate.tokenLife}`;
