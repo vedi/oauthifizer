@@ -28,20 +28,21 @@ class OAuth2 {
             clientId,
             clientSecret
           })
-          .asCallback(done)
-        ;
+          .asCallback(done);
       }),
-      [AUTH_TYPES.BEARER]: new BearerAuthenticator((accessToken, done) => {
+      [AUTH_TYPES.BEARER]: new BearerAuthenticator({passReqToCallback: true}, (req, accessToken, done) => {
         return authDelegate
-          .findUserByToken({accessToken})
+          .findUserByToken({
+            accessToken,
+            params: req.params
+          })
           .then((result) => {
-            return done(null, result.obj, result.info)
+            return done(null, result.obj, result.info);
           })
           .catch((err) => {
             err.status = err.status || 401;
             return done(err);
-          })
-          ;
+          });
       }),
       [AUTH_TYPES.CLIENT]: new ClientAuthenticator((clientId, clientSecret, done) => {
         authDelegate
@@ -86,9 +87,15 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
-            return authDelegate.createTokens(context);
+            return authDelegate.createAccessToken(context);
+          })
+          .then((accessToken) => {
+            context.tokenValue = accessToken;
+            return authDelegate.createRefreshToken(context);
+          })
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
+            return authDelegate.getTokenInfo(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -103,8 +110,7 @@ class OAuth2 {
               err.status = err.status || 401;
               return done(err);
             }
-          })
-        ;
+          });
       },
       [this.GRANT_TYPES.PASSWORD] (req, res, done) {
         const {user: client} = req;
@@ -127,11 +133,14 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
-            return authDelegate.createTokens(context);
+            return authDelegate.createAccessToken(context);
           })
-          .then(() => {
+          .then((accessToken) => {
+            context.tokenValue = accessToken;
+            return authDelegate.createRefreshToken(context);
+          })
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
             return authDelegate.getTokenInfo(context);
           })
           .then((tokenInfo) => {
@@ -167,9 +176,15 @@ class OAuth2 {
             return authDelegate.cleanUpTokens(context);
           })
           .then(() => {
-            context.tokenValue = authDelegate.generateTokenValue();
-            context.refreshTokenValue = authDelegate.generateTokenValue();
-            return authDelegate.createTokens(context);
+            return authDelegate.createAccessToken(context);
+          })
+          .then((accessToken) => {
+            context.tokenValue = accessToken;
+            return authDelegate.createRefreshToken(context);
+          })
+          .then((refreshToken) => {
+            context.refreshTokenValue = refreshToken;
+            return authDelegate.getTokenInfo(context);
           })
           .then(() => {
             return authDelegate.getTokenInfo(context);
@@ -200,7 +215,6 @@ class OAuth2 {
         const clientRedirectEndpoint = url.parse(client.redirectUri);
         const clientRedirectHost = clientRedirectEndpoint.hostname;
 
-
         if (!responseType) {
           return done({error: 'invalid_request', 'error_description': 'response_type must be specified'});
         }
@@ -213,17 +227,10 @@ class OAuth2 {
           return done({error: 'invalid_request', 'error_description': `Invalid response type "${responseType}"`});
         }
 
-        const token = this.authDelegate.generateTokenValue();
-
         return this.authDelegate
-          .createTokens({
-            client,
-            tokenValue: token,
-            // doesn't need refresh token, userId
-            grantType: this.GRANT_TYPES.IMPLICIT
-          })
-          .then(() => {
-            let responseRedirectUri = `${redirectUri}?access_token=&token_type=bearer&` +
+          .createAccessToken({client})
+          .then((token) => {
+            let responseRedirectUri = `${redirectUri}?access_token=${token}&token_type=bearer&` +
               `expires_in=${this.authDelegate.tokenLife}`;
 
             if (state) {
