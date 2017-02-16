@@ -1,10 +1,9 @@
 {
   "name": "oauthifizer",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Easy-to-integrate OAuth2 implementation.",
   "main": "index.js",
-  "dependencies": {
-  },
+  "dependencies": {},
   "devDependencies": {
     "eslint": "3.12.2",
     "eslint-config-airbnb-base": "11.0.0",
