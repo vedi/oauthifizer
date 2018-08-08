@@ -5,11 +5,12 @@
   "main": "index.js",
   "dependencies": {},
   "devDependencies": {
-    "eslint": "3.12.2",
-    "eslint-config-airbnb-base": "11.0.0",
-    "eslint-plugin-import": "2.2.0"
+    "eslint": "5.3.0",
+    "eslint-config-airbnb-base": "13.0.0",
+    "eslint-plugin-import": "2.13.0"
   },
   "scripts": {
+    "eslint": "eslint .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -30,15 +31,6 @@
     "url": "https://github.com/vedi/oauthifizer/issues"
   },
   "homepage": "https://github.com/vedi/oauthifizer",
-  "gitHead": "9fc434dbe06f896fa6c2871ddf990c3f920a600e",
-  "_id": "oauthifizer@0.1.0",
-  "_shasum": "80c3a11ff37b229bf5295dcb8a732a24c0fc113b",
-  "_from": "oauthifizer@0.1.0",
-  "_npmVersion": "1.4.23",
-  "_npmUser": {
-    "name": "vedi",
-    "email": "shubin.fedor@gmail.com"
-  },
   "maintainers": [
     {
       "name": "vedi",
@@ -50,10 +42,5 @@
     "tarball": "http://registry.npmjs.org/oauthifizer/-/oauthifizer-0.1.0.tgz"
   },
   "directories": {},
-  "_resolved": "https://registry.npmjs.org/oauthifizer/-/oauthifizer-0.1.0.tgz",
-  "readme": "ERROR: No README data found!",
-  "engines": {
-    "node": "^6.9.x",
-    "npm": "^3.10.x"
-  }
+  "readme": "ERROR: No README data found!"
 }
