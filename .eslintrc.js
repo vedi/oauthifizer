@@ -12,6 +12,7 @@ module.exports = {
       functions: 'never',
     }],
     'consistent-return': 0,
+    'function-paren-newline': 0,
     'no-else-return': 0,
     'no-param-reassign': 0,
     'no-shadow': 0,
